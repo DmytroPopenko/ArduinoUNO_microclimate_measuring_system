@@ -1,0 +1,135 @@
+
+/*
+       |-------|
+       | DHT11 |
+       |       |
+       |-------|
+         | | |
+         | | |
+        3  2  -
+      OUT VCC GND
+
+
+
+      -----------
+      | BMP 280 |
+      -----------
+SDO CSB SDA SCL GND VCC
+ 12  10  11  13  -   9
+
+*/
+
+
+#include <Adafruit_BMP280.h>
+#include <LiquidCrystal_I2C.h>
+#include "DHT.h"
+#define DHTPIN 3
+#define DHT_PW 2
+#define BMP_SCK   13
+#define BMP_MISO  12
+#define BMP_MOSI  11
+#define BMP_CS    10
+#define BMP_PW    9
+#define BTN_OUT   5
+#define BTN_PW    4
+boolean butt;
+int light = 0;
+int M[6];
+int rain_probability = 50;
+int parts = 0;
+int cur, time_ev = 0;
+int standart;
+
+DHT dht(DHTPIN, DHT11);
+LiquidCrystal_I2C lcd(0x27,16,2);
+Adafruit_BMP280 bmp280SoftSPI(BMP_CS, BMP_MOSI, BMP_MISO,  BMP_SCK);
+
+
+  byte rain[] = {
+  B01100,
+  B11111,
+  B11111,
+  B00000,
+  B01010,
+  B00000,
+  B00101,
+  B10000
+  };
+
+void setup(){
+  //Ініціалізація монітору порта
+  Serial.begin(9600);
+  // Ініціалізація DHT11 термоментра і гугрометра
+  dht.begin();
+  // Ініціалізація LCD 1602 екрану
+  lcd.init();
+  
+  while (!bmp280SoftSPI.begin()) {
+    Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
+    delay(2000);
+  }
+  
+  pinMode(DHT_PW, OUTPUT);
+  pinMode(BTN_PW, OUTPUT);
+  pinMode(BMP_PW, OUTPUT);
+  pinMode(BTN_OUT, INPUT);
+  digitalWrite(DHT_PW, HIGH);
+  digitalWrite(BMP_PW, HIGH);
+  lcd.backlight();
+
+  
+  standart = int(bmp280SoftSPI.readPressure());
+  for (int i=0; i<6; i++){
+    M[i] = 1;
+  }
+}
+
+void loop(){
+  lcd.backlight();
+  butt = digitalRead(BTN_OUT);
+  if (butt == 1){
+      Serial.println("!!!");}
+  float humidity = dht.readHumidity();
+  float temperature = dht.readTemperature();
+  float pressure = bmp280SoftSPI.readPressure();
+  pressure = pressure/1000;
+  if (time_ev == 0){
+    time_ev = 600;
+    if (parts==5){
+          cur = 0;
+          parts = 0;
+          for (int i=0; i<6; i++) cur += M[i];
+          rain_probability += int(int(cur/6)/10);
+          if (rain_probability>99){
+            rain_probability = 99;
+          };
+          if(rain_probability<0){
+            rain_probability = 1;
+          };
+    } else {
+          M[parts] = int(bmp280SoftSPI.readPressure())-standart;
+          parts++;
+    }
+  } else {time_ev--;}
+  lcd.createChar(0, rain);
+  lcd.home();
+  lcd.setCursor(12,0);
+  lcd.write(0);
+  lcd.print(rain_probability);
+  lcd.print("%");
+  lcd.home();
+  lcd.print("t: ");
+  lcd.print(String(temperature));
+  lcd.setCursor(0,1);
+  lcd.print("h: ");
+  lcd.print(String((int)humidity));
+  lcd.print("%");
+  lcd.setCursor(10,1);
+  lcd.print(String(int(pressure)));
+  lcd.print("kPa");
+  Serial.println(bmp280SoftSPI.readPressure());
+
+  
+  delay(1000);
+  
+}
